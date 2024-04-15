@@ -39,7 +39,3 @@ aws cloudformation delete-stack --stack-name MyStackName
 
 
 Replace `MyStackName` with the name of the stack you created.
-
-## License
-
-This project is licensed under the [MIT License](LICENSE).
