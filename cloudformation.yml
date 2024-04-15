@@ -109,6 +109,7 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: "stas-cloudformation-bucket"
+      DeletionPolicy: Delete
     Description: "S3 Bucket for CloudFormation"
 
   StasLoadBalancer:
