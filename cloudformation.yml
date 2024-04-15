@@ -1,0 +1,152 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "Create VPC, EC2 instance, and Application Load Balancer with nginx"
+
+Resources:
+  StasVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: "10.0.0.0/16"
+    Description: "Virtual Private Cloud (VPC)"
+
+  StasSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref StasVPC
+      CidrBlock: "10.0.1.0/24"
+    Description: "Public Subnet 1"
+
+  StasSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref StasVPC
+      CidrBlock: "10.0.2.0/24"
+    Description: "Public Subnet 2"
+
+  StasInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Description: "Internet Gateway"
+
+  StasGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref StasVPC
+      InternetGatewayId: !Ref StasInternetGateway
+    Description: "Attachment of Internet Gateway to VPC"
+
+  StasRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref StasVPC
+    Description: "Route Table"
+
+  StasRoute:
+    Type: AWS::EC2::Route
+    DependsOn: StasGatewayAttachment
+    Properties:
+      RouteTableId: !Ref StasRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !Ref StasInternetGateway
+    Description: "Route to Internet Gateway"
+
+  StasSubnet1Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref StasSubnet1
+      RouteTableId: !Ref StasRouteTable
+
+  StasSubnet2Association:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref StasSubnet2
+      RouteTableId: !Ref StasRouteTable
+
+  StasSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Enable HTTP access"
+      VpcId: !Ref StasVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '80'
+          ToPort: '80'
+          CidrIp: "0.0.0.0/0"
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: "0.0.0.0/0"
+    Description: "Security Group"
+
+  StasEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: "ami-051f8a213df8bc089" # Amazon Linux
+      InstanceType: "t2.micro"
+      KeyName: "alazze"
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          if ! command -v nginx &> /dev/null; then
+            echo "Nginx is not installed. Installing..."
+            yum install nginx -y
+            systemctl enable nginx
+            systemctl start nginx
+          else
+            echo "Nginx is already installed."
+          fi  
+      Tags:
+        - Key: "Stas"
+          Value: "MyEC2Instance"
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeleteOnTermination: "true"
+          SubnetId: !Ref StasSubnet1
+          DeviceIndex: "0"
+          GroupSet:
+            - !Ref StasSecurityGroup
+    Description: "EC2 Instance"
+
+  MyBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: "stas-cloudformation-bucket"
+    Description: "S3 Bucket for CloudFormation"
+
+  StasLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Scheme: internet-facing
+      Subnets:
+        - !Ref StasSubnet1
+        - !Ref StasSubnet2
+      SecurityGroups:
+        - !Ref StasSecurityGroup
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: '60'
+    Description: "Application Load Balancer"
+
+  StasTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckPath: "/"
+      HealthCheckProtocol: "HTTP"
+      Port: 80
+      Protocol: "HTTP"
+      VpcId: !Ref StasVPC
+    Description: "Target Group for ALB"
+
+  StasListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref StasTargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref StasLoadBalancer
+      Port: 80
+      Protocol: HTTP
+    Description: "Listener for ALB"
+
+Outputs:
+  TemplateURL:
+    Value: !Ref "AWS::StackName"
+    Description: "URL of the CloudFormation template"
