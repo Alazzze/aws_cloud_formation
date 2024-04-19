@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: "Create VPC, EC2 instance, and Application Load Balancer with nginx"
+Description: "Create VPC, EC2 instances, and Application Load Balancer with nginx"
 
 Resources:
   StasVPC:
@@ -13,6 +13,7 @@ Resources:
     Properties:
       VpcId: !Ref StasVPC
       CidrBlock: "10.0.1.0/24"
+      AvailabilityZone: "us-east-1a"
     Description: "Public Subnet 1"
 
   StasSubnet2:
@@ -20,6 +21,7 @@ Resources:
     Properties:
       VpcId: !Ref StasVPC
       CidrBlock: "10.0.2.0/24"
+      AvailabilityZone: "us-east-1b"
     Description: "Public Subnet 2"
 
   StasInternetGateway:
@@ -76,7 +78,7 @@ Resources:
           CidrIp: "0.0.0.0/0"
     Description: "Security Group"
 
-  StasEC2Instance:
+  StasEC2Instance1:
     Type: AWS::EC2::Instance
     Properties:
       ImageId: "ami-051f8a213df8bc089" # Amazon Linux
@@ -93,9 +95,10 @@ Resources:
           else
             echo "Nginx is already installed."
           fi  
+          echo "<html><body bgcolor=blue><center><h1><p><forn_color=white>Web Server-1</h1></center></body></html>" > /usr/share/nginx/html/index.html
       Tags:
         - Key: "Stas"
-          Value: "MyEC2Instance"
+          Value: "MyEC2Instance1"
       NetworkInterfaces:
         - AssociatePublicIpAddress: "true"
           DeleteOnTermination: "true"
@@ -103,13 +106,42 @@ Resources:
           DeviceIndex: "0"
           GroupSet:
             - !Ref StasSecurityGroup
-    Description: "EC2 Instance"
+    Description: "EC2 Instance 1"
+
+  StasEC2Instance2:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: "ami-051f8a213df8bc089" # Amazon Linux
+      InstanceType: "t2.micro"
+      KeyName: "alazze"
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          if ! command -v nginx &> /dev/null; then
+            echo "Nginx is not installed. Installing..."
+            yum install nginx -y
+            systemctl enable nginx
+            systemctl start nginx
+          else
+            echo "Nginx is already installed."
+          fi  
+          echo "<html><body bgcolor=blue><center><h1><p><forn_color=white>Web Server-2</h1></center></body></html>" > /usr/share/nginx/html/index.html
+      Tags:
+        - Key: "Stas"
+          Value: "MyEC2Instance2"
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: "true"
+          DeleteOnTermination: "true"
+          SubnetId: !Ref StasSubnet2
+          DeviceIndex: "0"
+          GroupSet:
+            - !Ref StasSecurityGroup
+    Description: "EC2 Instance 2"
 
   MyBucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: "stas-cloudformation-bucket"
-      DeletionPolicy: Delete
     Description: "S3 Bucket for CloudFormation"
 
   StasLoadBalancer:
